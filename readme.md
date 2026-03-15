@@ -11,5 +11,5 @@ bash
 
 Betterstack removal
 ```
-curl -sSL https://raw.githubusercontent.com/jonaelsasser/tool-deployment/refs/heads/main/betterstack-removal.sh
+curl -sSL https://raw.githubusercontent.com/jonaelsasser/tool-deployment/refs/heads/main/betterstack-removal.sh | bash
 ```
