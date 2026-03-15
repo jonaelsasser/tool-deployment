@@ -1,37 +1,70 @@
 #!/bin/bash
 
 # ==============================================================================
-# BETTER STACK REMOVAL SCRIPT
-# This script stops and removes the Logtail/Better Stack Agent and its configs.
+# FINAL BETTER STACK & VECTOR REMOVAL SCRIPT
+# Targeted for non-Docker installations (Native Vector/Logtail/Rsyslog)
 # ==============================================================================
 
-echo "--- Starting Better Stack Cleanup ---"
+echo "--- 1. Stopping and Disabling Services ---"
+# Vector is the primary engine for modern Better Stack native installs
+sudo systemctl stop vector 2>/dev/null || true
+sudo systemctl disable vector 2>/dev/null || true
 
-# 1. Stop and disable the Logtail/Better Stack service
-echo "Stopping services..."
+# Legacy Logtail agent
 sudo systemctl stop logtail 2>/dev/null || true
 sudo systemctl disable logtail 2>/dev/null || true
-sudo systemctl stop better-stack-agent 2>/dev/null || true
-sudo systemctl disable better-stack-agent 2>/dev/null || true
 
-# 2. Remove the packages (Debian/Ubuntu)
-echo "Removing agent packages..."
-sudo apt-get purge -y logtail 2>/dev/null || true
-sudo apt-get purge -y better-stack-agent 2>/dev/null || true
-sudo apt-get autoremove -y
+echo "--- 2. Cleaning up Rsyslog (The 'Sneaky' Reporter) ---"
+# Check for common Better Stack rsyslog redirects
+REPORTS_TO_CLEAN=(
+  "/etc/rsyslog.d/99-logtail.conf"
+  "/etc/rsyslog.d/99-betterstack.conf"
+  "/etc/rsyslog.d/logtail.conf"
+  "/etc/rsyslog.d/22-logtail.conf"
+)
 
-# 3. Clean up configuration and log directories
-echo "Cleaning up files..."
+for file in "${REPORTS_TO_CLEAN[@]}"; do
+  if [ -f "$file" ]; then
+    echo "Removing $file..."
+    sudo rm "$file"
+    RSYSLOG_NEED_RESTART=true
+  fi
+done
+
+if [ "$RSYSLOG_NEED_RESTART" = true ]; then
+  echo "Restarting rsyslog to apply changes..."
+  sudo systemctl restart rsyslog
+fi
+
+echo "--- 3. Deleting Binaries and Data Directories ---"
+# Purge Vector
+sudo rm -rf /etc/vector
+sudo rm -rf /var/lib/vector
+sudo rm -f /usr/bin/vector
+
+# Purge Logtail
 sudo rm -rf /etc/logtail
 sudo rm -rf /var/lib/logtail
-sudo rm -rf /etc/better-stack-agent
-sudo rm -rf /var/lib/better-stack-agent
+sudo rm -f /usr/bin/logtail
+
+echo "--- 4. Cleaning APT Repositories ---"
 sudo rm -f /etc/apt/sources.list.d/logtail.list
 sudo rm -f /etc/apt/sources.list.d/better-stack.list
+sudo rm -f /etc/apt/sources.list.d/betterstack.list
+sudo rm -f /etc/apt/sources.list.d/timber.list
 
-# 4. Remove GPG keys
-echo "Removing repository keys..."
-sudo apt-key del 41A70337 2>/dev/null || true
+echo "--- 5. System Cleanup ---"
+sudo systemctl daemon-reload
+sudo apt-get update &>/dev/null # Optional: refresh local cache
+sudo apt-get autoremove -y
 
-echo "--- Cleanup Complete! ---"
-echo "Better Stack has been removed. You are ready to deploy Beszel & CrowdSec."
+echo "--- 6. Final Verification ---"
+echo "Checking for any remaining connections to Better Stack/Logtail..."
+# This checks for open network connections to common log ingestion ports
+if sudo ss -tpn | grep -Ei "vector|logtail|betterstack|in.logs.betterstack"; then
+  echo "⚠️ Warning: Some connections still appear active. You may need to reboot."
+else
+  echo "✅ No active connections found. Cleanup successful."
+fi
+
+echo "--- Done! ---"
