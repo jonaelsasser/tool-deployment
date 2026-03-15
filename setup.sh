@@ -42,6 +42,7 @@ services:
       KEY: "$BESZEL_KEY"
       TOKEN: "$BESZEL_TOKEN"
       HUB_URL: https://monitoring.elsasser.cloud
+      APP_URL: https://monitoring.elsasser.cloud
 EOF
 
 cd /opt/beszel-agent
